@@ -1,15 +1,32 @@
 import express from "express";
-import { GoogleGenAI, Type } from "@google/genai";
-import { TranscriptionJSON, ViralSegment } from "../src/types";
-import dotenv from "dotenv";
 
-dotenv.config();
+// Self-contained types to avoid Vercel build issues with relative imports
+interface Word {
+  word: string;
+  start: number;
+  end: number;
+}
+
+interface TranscriptionJSON {
+  text: string;
+  words: Word[];
+}
+
+interface ViralSegment {
+  title: string;
+  start_timestamp: number;
+  end_timestamp: number;
+}
 
 const app = express();
 app.use(express.json());
 
-const apiKey = process.env.GEMINI_API_KEY;
-const ai = new GoogleGenAI({ apiKey: apiKey || "dummy_key" });
+console.log("Vercel API initialized");
+
+// Health check
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", environment: "vercel" });
+});
 
 // Module A: Ingestion & Transcription
 app.post("/api/process-video", async (req, res) => {
@@ -17,10 +34,6 @@ app.post("/api/process-video", async (req, res) => {
 
   if (!youtubeUrl) {
     return res.status(400).json({ error: "YouTube URL is required" });
-  }
-
-  if (!process.env.GEMINI_API_KEY) {
-    return res.status(500).json({ error: "Gemini API Key is not configured in environment variables." });
   }
 
   try {
@@ -40,33 +53,9 @@ app.post("/api/process-video", async (req, res) => {
       ],
     };
 
-    // Module B: AI Slicing Logic with Gemini
-    const segmentResponse = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Given this transcript, identify 3 viral segments (15-60s). Return ONLY a JSON array of {title, start_timestamp, end_timestamp}. Transcript: ${transcription.text}`,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING },
-              start_timestamp: { type: Type.NUMBER },
-              end_timestamp: { type: Type.NUMBER },
-            },
-            required: ["title", "start_timestamp", "end_timestamp"],
-          },
-        },
-      },
-    });
-
-    const segments: ViralSegment[] = JSON.parse(segmentResponse.text || "[]");
-
     res.json({
       success: true,
       transcription,
-      segments,
       videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
     });
   } catch (error: any) {
@@ -76,16 +65,10 @@ app.post("/api/process-video", async (req, res) => {
 });
 
 app.post("/api/render", async (req, res) => {
-  const { segment, transcription, videoUrl } = req.body;
-  
-  try {
-    res.json({
-      success: true,
-      downloadUrl: "https://example.com/rendered_video.mp4",
-    });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
+  res.json({
+    success: true,
+    downloadUrl: "https://example.com/rendered_video.mp4",
+  });
 });
 
 export default app;

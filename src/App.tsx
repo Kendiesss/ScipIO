@@ -4,6 +4,7 @@ import { ScipioComposition } from './remotion/ScipioComposition';
 import { TranscriptionJSON, ViralSegment } from './types';
 import { Youtube, Scissors, Wand2, Download, Loader2, Play } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { GoogleGenAI, Type } from "@google/genai";
 
 export default function App() {
   const [url, setUrl] = useState('');
@@ -30,12 +31,42 @@ export default function App() {
       });
       
       const data = await response.json();
-      if (data.success) {
-        setResult(data);
-        setSelectedSegment(data.segments[0]);
-      } else {
-        alert(`Error: ${data.error || 'Failed to process video'}`);
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to process video');
       }
+
+      setProcessingStep('AI Analyzing Viral Segments...');
+      
+      // Call Gemini from Frontend (Guideline Compliance)
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+      const segmentResponse = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Given this transcript, identify 3 viral segments (15-60s). Return ONLY a JSON array of {title, start_timestamp, end_timestamp}. Transcript: ${data.transcription.text}`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                title: { type: Type.STRING },
+                start_timestamp: { type: Type.NUMBER },
+                end_timestamp: { type: Type.NUMBER },
+              },
+              required: ["title", "start_timestamp", "end_timestamp"],
+            },
+          },
+        },
+      });
+
+      const segments: ViralSegment[] = JSON.parse(segmentResponse.text || "[]");
+      
+      setResult({
+        transcription: data.transcription,
+        segments: segments,
+        videoUrl: data.videoUrl
+      });
+      setSelectedSegment(segments[0]);
     } catch (error: any) {
       console.error(error);
       alert(`An error occurred: ${error.message || 'Unknown error'}`);
