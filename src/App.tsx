@@ -30,6 +30,13 @@ export default function App() {
         body: JSON.stringify({ youtubeUrl: url }),
       });
       
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Server returned non-JSON response:', text);
+        throw new Error(`Server error (${response.status}): The backend failed to return a valid response. This usually happens if the video is too long or restricted.`);
+      }
+
       const data = await response.json();
       if (!data.success) {
         throw new Error(data.error || 'Failed to process video');

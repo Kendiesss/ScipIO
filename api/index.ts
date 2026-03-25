@@ -54,7 +54,11 @@ app.post("/api/process-video", async (req, res) => {
     // 1. Get Real Transcription from YouTube
     let transcription: TranscriptionJSON;
     try {
-      const transcriptItems = await YoutubeTranscript.fetchTranscript(videoId);
+      // Timeout for transcript fetch
+      const transcriptPromise = YoutubeTranscript.fetchTranscript(videoId);
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Transcript timeout")), 5000));
+      
+      const transcriptItems = (await Promise.race([transcriptPromise, timeoutPromise])) as any[];
       const allWords: Word[] = [];
       transcriptItems.forEach(item => {
         const words = item.text.split(/\s+/);
@@ -73,7 +77,7 @@ app.post("/api/process-video", async (req, res) => {
         words: allWords,
       };
     } catch (err) {
-      console.warn("YouTube transcript fetch failed, using fallback mock", err);
+      console.warn("YouTube transcript fetch failed or timed out, using fallback mock", err);
       transcription = {
         text: "Welcome to the future of video editing with Scipio. This system automatically finds the best parts of your video and turns them into vertical clips.",
         words: [
@@ -93,13 +97,23 @@ app.post("/api/process-video", async (req, res) => {
     // 2. Get Real Video URL using ytdl-core
     let videoUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
     try {
-      const info = await ytdl.getInfo(videoId);
+      // Timeout for ytdl fetch
+      const ytdlPromise = ytdl.getInfo(videoId, {
+        requestOptions: {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          }
+        }
+      });
+      const ytdlTimeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("ytdl timeout")), 4000));
+      
+      const info = (await Promise.race([ytdlPromise, ytdlTimeoutPromise])) as any;
       const format = ytdl.chooseFormat(info.formats, { quality: 'highestvideo', filter: 'videoandaudio' });
       if (format && format.url) {
         videoUrl = format.url;
       }
     } catch (err) {
-      console.warn("ytdl-core failed to get video URL, using fallback", err);
+      console.warn("ytdl-core failed or timed out to get video URL, using fallback", err);
     }
 
     res.json({
