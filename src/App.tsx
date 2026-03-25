@@ -137,7 +137,7 @@ export default function App() {
                 fps={30}
                 style={{ width: '100%', height: '100%' }}
                 inputProps={{
-                  videoSrc: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4', // Placeholder for demo
+                  videoSrc: result.videoUrl,
                   transcription: result.transcription,
                   segment: selectedSegment,
                   watermarkUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/Google_2015_logo.svg/2560px-Google_2015_logo.svg.png'
