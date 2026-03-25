@@ -55,13 +55,36 @@ async function startServer() {
       console.log(`Processing URL: ${youtubeUrl}`);
       
       const videoId = getYoutubeId(youtubeUrl);
-      if (!videoId) throw new Error("Invalid YouTube URL");
+      
+      // Handle Direct MP4 URL (Bypass YouTube)
+      if (!videoId && (youtubeUrl.endsWith(".mp4") || youtubeUrl.includes("commondatastorage"))) {
+        console.log("Direct MP4 URL detected. Bypassing YouTube fetch.");
+        return res.json({
+          success: true,
+          transcription: {
+            text: "[DIRECT VIDEO] This is a direct video link. In a full app, you would use an AI transcription service like Whisper to generate the text for this video.",
+            words: [
+              { word: "Direct", start: 0, end: 1.0 },
+              { word: "Video", start: 1.0, end: 2.0 },
+              { word: "Detected", start: 2.0, end: 3.0 },
+            ],
+          },
+          segments: [
+            { title: "Viral Segment 1", start_timestamp: 0, end_timestamp: 10 },
+            { title: "Viral Segment 2", start_timestamp: 10, end_timestamp: 20 },
+          ],
+          videoUrl: youtubeUrl,
+        });
+      }
+
+      if (!videoId) throw new Error("Invalid YouTube URL format. Please use a full YouTube watch link or a direct .mp4 link.");
 
       // 1. Get Real Transcription from YouTube
       let transcription: TranscriptionJSON;
       try {
+        console.log(`Fetching transcript for ${videoId}...`);
         const transcriptPromise = YoutubeTranscript.fetchTranscript(videoId);
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Transcript timeout")), 8000));
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Transcript fetch timed out (8s)")), 8000));
         
         const transcriptItems = (await Promise.race([transcriptPromise, timeoutPromise])) as any[];
         const allWords: Word[] = [];
@@ -81,20 +104,17 @@ async function startServer() {
           text: transcriptItems.map(item => item.text).join(" "),
           words: allWords,
         };
-      } catch (err) {
-        console.warn("YouTube transcript fetch failed or timed out, using fallback mock", err);
+        console.log("Transcript fetched successfully.");
+      } catch (err: any) {
+        console.warn(`YouTube transcript fetch failed: ${err.message}. Using descriptive fallback.`);
         transcription = {
-          text: "Welcome to the future of video editing with Scipio. This system automatically finds the best parts of your video and turns them into vertical clips.",
+          text: "[FALLBACK TRANSCRIPT] YouTube blocked the transcript request from this server. This often happens due to bot detection. In a production environment, you would use a proxy or a dedicated transcription service like Whisper.",
           words: [
-            { word: "Welcome", start: 0, end: 0.5 },
-            { word: "to", start: 0.5, end: 0.7 },
-            { word: "the", start: 0.7, end: 0.9 },
-            { word: "future", start: 0.9, end: 1.5 },
-            { word: "of", start: 1.5, end: 1.7 },
-            { word: "video", start: 1.7, end: 2.2 },
-            { word: "editing", start: 2.2, end: 2.8 },
-            { word: "with", start: 2.8, end: 3.2 },
-            { word: "Scipio.", start: 3.2, end: 4.0 },
+            { word: "[FALLBACK]", start: 0, end: 1.0 },
+            { word: "YouTube", start: 1.0, end: 2.0 },
+            { word: "blocked", start: 2.0, end: 3.0 },
+            { word: "the", start: 3.0, end: 4.0 },
+            { word: "request.", start: 4.0, end: 5.0 },
           ],
         };
       }
@@ -102,22 +122,29 @@ async function startServer() {
       // 2. Get Real Video URL using ytdl-core
       let videoUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
       try {
+        console.log(`Fetching video stream for ${videoId}...`);
         const ytdlPromise = ytdl.getInfo(videoId, {
           requestOptions: {
             headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.9',
+              'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+              'Sec-Ch-Ua-Mobile': '?0',
+              'Sec-Ch-Ua-Platform': '"Windows"',
             }
           }
         });
-        const ytdlTimeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("ytdl timeout")), 8000));
+        const ytdlTimeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Video stream fetch timed out (8s)")), 8000));
         
         const info = (await Promise.race([ytdlPromise, ytdlTimeoutPromise])) as any;
         const format = ytdl.chooseFormat(info.formats, { quality: 'highestvideo', filter: 'videoandaudio' });
         if (format && format.url) {
           videoUrl = format.url;
+          console.log("Video stream URL fetched successfully.");
         }
-      } catch (err) {
-        console.warn("ytdl-core failed or timed out to get video URL, using fallback", err);
+      } catch (err: any) {
+        console.warn(`ytdl-core failed to get video URL: ${err.message}. Using BigBuckBunny fallback.`);
       }
 
       // Module B: AI Slicing Logic with Gemini

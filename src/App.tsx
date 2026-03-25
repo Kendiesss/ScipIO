@@ -108,25 +108,30 @@ export default function App() {
               AI-detect viral segments, and render with dynamic subtitles.
             </p>
             
-            <div className="flex gap-2 p-2 bg-white/5 rounded-xl border border-white/10 focus-within:border-orange-500/50 transition-colors">
-              <div className="flex-1 flex items-center px-4 gap-3">
-                <Youtube className="w-5 h-5 text-red-500" />
-                <input 
-                  type="text" 
-                  placeholder="Paste YouTube URL..."
-                  className="bg-transparent w-full outline-none text-sm"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                />
+            <div className="space-y-4">
+              <div className="flex gap-2 p-2 bg-white/5 rounded-xl border border-white/10 focus-within:border-orange-500/50 transition-colors">
+                <div className="flex-1 flex items-center px-4 gap-3">
+                  <Youtube className="w-5 h-5 text-red-500" />
+                  <input 
+                    type="text" 
+                    placeholder="Paste YouTube URL or Direct MP4 link..."
+                    className="bg-transparent w-full outline-none text-sm"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                  />
+                </div>
+                <button 
+                  onClick={handleProcess}
+                  disabled={loading || !url}
+                  className="bg-orange-600 hover:bg-orange-500 disabled:opacity-50 px-6 py-2 rounded-lg font-bold text-sm transition-all flex items-center gap-2"
+                >
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                  {loading ? 'Analyze' : 'Analyze'}
+                </button>
               </div>
-              <button 
-                onClick={handleProcess}
-                disabled={loading || !url}
-                className="bg-orange-600 hover:bg-orange-500 disabled:opacity-50 px-6 py-2 rounded-lg font-bold text-sm transition-all flex items-center gap-2"
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-                {loading ? 'Processing...' : 'Analyze'}
-              </button>
+              <p className="text-[10px] text-white/30 font-mono text-center">
+                TIP: If YouTube is blocked, try a direct .mp4 link (e.g. from Dropbox or a public CDN)
+              </p>
             </div>
             {processingStep && (
               <p className="text-xs font-mono text-orange-500 animate-pulse">{processingStep}</p>
