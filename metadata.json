@@ -1,0 +1,5 @@
+{
+  "name": "Scipio AI Video Editor",
+  "description": "Automated pipeline to convert YouTube videos into viral 9:16 vertical clips with AI subtitles and watermarks.",
+  "requestFramePermissions": []
+}
