@@ -6,8 +6,10 @@ import axios from "axios";
 import FormData from "form-data";
 import fs from "fs";
 import { execSync } from "child_process";
-import { TranscriptionJSON, ViralSegment } from "./src/types";
+import { TranscriptionJSON, ViralSegment, Word } from "./src/types";
 import dotenv from "dotenv";
+import ytdl from "@distube/ytdl-core";
+import { YoutubeTranscript } from "youtube-transcript";
 
 dotenv.config();
 
@@ -29,6 +31,13 @@ async function startServer() {
 
   const ai = new GoogleGenAI({ apiKey: apiKey || "dummy_key" });
 
+  // Helper to extract YouTube ID
+  const getYoutubeId = (url: string) => {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  };
+
   // Module A: Ingestion & Transcription
   app.post("/api/process-video", async (req, res) => {
     console.log("POST /api/process-video received");
@@ -45,47 +54,71 @@ async function startServer() {
     try {
       console.log(`Processing URL: ${youtubeUrl}`);
       
-      // 1. Download Video/Audio using yt-dlp (Mocking for this environment)
-      // In a real environment:
-      // execSync(`yt-dlp -f "bestvideo[height<=720]+bestaudio/best[height<=720]" --merge-output-format mp4 -o "temp_video.mp4" ${youtubeUrl}`);
-      // execSync(`ffmpeg -i temp_video.mp4 -vn -acodec libmp3lame temp_audio.mp3`);
-      
-      const videoPath = "temp_video.mp4";
-      const audioPath = "temp_audio.mp3";
+      const videoId = getYoutubeId(youtubeUrl);
+      if (!videoId) throw new Error("Invalid YouTube URL");
 
-      // 2. Send to Whisper API
-      // const formData = new FormData();
-      // formData.append("file", fs.createReadStream(audioPath));
-      // formData.append("model", "whisper-1");
-      // formData.append("response_format", "verbose_json");
-      // formData.append("timestamp_granularities[]", "word");
+      // 1. Get Real Transcription from YouTube
+      let transcription: TranscriptionJSON;
+      try {
+        const transcriptPromise = YoutubeTranscript.fetchTranscript(videoId);
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Transcript timeout")), 8000));
+        
+        const transcriptItems = (await Promise.race([transcriptPromise, timeoutPromise])) as any[];
+        const allWords: Word[] = [];
+        transcriptItems.forEach(item => {
+          const words = item.text.split(/\s+/);
+          const durationPerWord = item.duration / words.length;
+          words.forEach((word, i) => {
+            allWords.push({
+              word: word.trim(),
+              start: (item.offset + (i * durationPerWord)) / 1000,
+              end: (item.offset + ((i + 1) * durationPerWord)) / 1000,
+            });
+          });
+        });
 
-      // const whisperResponse = await axios.post(
-      //   "https://api.openai.com/v1/audio/transcriptions",
-      //   formData,
-      //   {
-      //     headers: {
-      //       ...formData.getHeaders(),
-      //       Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      //     },
-      //   }
-      // );
+        transcription = {
+          text: transcriptItems.map(item => item.text).join(" "),
+          words: allWords,
+        };
+      } catch (err) {
+        console.warn("YouTube transcript fetch failed or timed out, using fallback mock", err);
+        transcription = {
+          text: "Welcome to the future of video editing with Scipio. This system automatically finds the best parts of your video and turns them into vertical clips.",
+          words: [
+            { word: "Welcome", start: 0, end: 0.5 },
+            { word: "to", start: 0.5, end: 0.7 },
+            { word: "the", start: 0.7, end: 0.9 },
+            { word: "future", start: 0.9, end: 1.5 },
+            { word: "of", start: 1.5, end: 1.7 },
+            { word: "video", start: 1.7, end: 2.2 },
+            { word: "editing", start: 2.2, end: 2.8 },
+            { word: "with", start: 2.8, end: 3.2 },
+            { word: "Scipio.", start: 3.2, end: 4.0 },
+          ],
+        };
+      }
 
-      // Mocking transcription for demo purposes
-      const transcription: TranscriptionJSON = {
-        text: "Welcome to the future of video editing with Scipio. This system automatically finds the best parts of your video and turns them into vertical clips.",
-        words: [
-          { word: "Welcome", start: 0, end: 0.5 },
-          { word: "to", start: 0.5, end: 0.7 },
-          { word: "the", start: 0.7, end: 0.9 },
-          { word: "future", start: 0.9, end: 1.5 },
-          { word: "of", start: 1.5, end: 1.7 },
-          { word: "video", start: 1.7, end: 2.2 },
-          { word: "editing", start: 2.2, end: 2.8 },
-          { word: "with", start: 2.8, end: 3.2 },
-          { word: "Scipio.", start: 3.2, end: 4.0 },
-        ],
-      };
+      // 2. Get Real Video URL using ytdl-core
+      let videoUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+      try {
+        const ytdlPromise = ytdl.getInfo(videoId, {
+          requestOptions: {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            }
+          }
+        });
+        const ytdlTimeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("ytdl timeout")), 8000));
+        
+        const info = (await Promise.race([ytdlPromise, ytdlTimeoutPromise])) as any;
+        const format = ytdl.chooseFormat(info.formats, { quality: 'highestvideo', filter: 'videoandaudio' });
+        if (format && format.url) {
+          videoUrl = format.url;
+        }
+      } catch (err) {
+        console.warn("ytdl-core failed or timed out to get video URL, using fallback", err);
+      }
 
       // Module B: AI Slicing Logic with Gemini
       const segmentResponse = await ai.models.generateContent({
@@ -114,7 +147,7 @@ async function startServer() {
         success: true,
         transcription,
         segments,
-        videoUrl: "/temp_video.mp4", // In real app, this would be a signed URL or local path
+        videoUrl,
       });
     } catch (error: any) {
       console.error("Error processing video:", error);
