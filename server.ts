@@ -17,14 +17,29 @@ async function startServer() {
 
   app.use(express.json());
 
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+  // Health check
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", env: process.env.NODE_ENV });
+  });
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    console.error("CRITICAL: GEMINI_API_KEY is missing from environment variables.");
+  }
+
+  const ai = new GoogleGenAI({ apiKey: apiKey || "dummy_key" });
 
   // Module A: Ingestion & Transcription
   app.post("/api/process-video", async (req, res) => {
+    console.log("POST /api/process-video received");
     const { youtubeUrl } = req.body;
 
     if (!youtubeUrl) {
       return res.status(400).json({ error: "YouTube URL is required" });
+    }
+
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({ error: "Gemini API Key is not configured in the Secrets panel." });
     }
 
     try {
@@ -150,4 +165,6 @@ async function startServer() {
   });
 }
 
-startServer();
+startServer().catch((err) => {
+  console.error("Failed to start server:", err);
+});
