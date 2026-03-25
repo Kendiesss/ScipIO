@@ -34,11 +34,11 @@ export default function App() {
         setResult(data);
         setSelectedSegment(data.segments[0]);
       } else {
-        alert(data.error || 'Failed to process video');
+        alert(`Error: ${data.error || 'Failed to process video'}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert('An error occurred');
+      alert(`An error occurred: ${error.message || 'Unknown error'}`);
     } finally {
       setLoading(false);
       setProcessingStep('');

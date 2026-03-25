@@ -7,6 +7,9 @@ import FormData from "form-data";
 import fs from "fs";
 import { execSync } from "child_process";
 import { TranscriptionJSON, ViralSegment } from "./src/types";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 async function startServer() {
   const app = express();
@@ -71,7 +74,7 @@ async function startServer() {
 
       // Module B: AI Slicing Logic with Gemini
       const segmentResponse = await ai.models.generateContent({
-        model: "gemini-3.1-flash-lite-preview",
+        model: "gemini-3-flash-preview",
         contents: `Given this transcript, identify 3 viral segments (15-60s). Return ONLY a JSON array of {title, start_timestamp, end_timestamp}. Transcript: ${transcription.text}`,
         config: {
           responseMimeType: "application/json",
